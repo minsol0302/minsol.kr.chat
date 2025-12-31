@@ -1,0 +1,92 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Model files (usually very large)
+*.pt
+*.pth
+*.h5
+*.pkl
+*.ckpt
+*.safetensors
+*.onnx
+*.pb
+*.tflite
+*.bin
+*.gguf
+*.ggml
+
+# Data files and directories
+data/
+*.json
+*.csv
+*.tsv
+*.parquet
+*.arrow
+*.feather
+
+# Vector store files
+*.faiss
+*.index
+*.pkl
+*.npy
+*.npz
+
+# Model directories
+model/midm/
+model/*.safetensors
+model/*.bin
+model/*.pt
+model/*.pth
+
+# Tokenizer files (can be large)
+*.tokenizer.json
+tokenizer.json
+
+# Environment files
+.env
+.venv
+env/
+venv/
+ENV/
+*.env
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+.cache/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Large data files
+*.zip
+*.tar
+*.tar.gz
+*.gz
+*.rar
+*.7z
+
