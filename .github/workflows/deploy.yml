@@ -1,0 +1,101 @@
+name: Deploy Chat Service to EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build Docker image
+        run: |
+          docker build -t chat.minsol.kr:latest -f Dockerfile .
+
+      - name: Save Docker image
+        run: |
+          docker save chat.minsol.kr:latest | gzip > chat-image.tar.gz
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy Docker image to EC2
+        run: |
+          scp -i ~/.ssh/id_rsa -P ${{ secrets.EC2_SSH_PORT || 22 }} \
+            chat-image.tar.gz \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
+
+      - name: Deploy to EC2
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          POSTGRES_HOST: ${{ secrets.DB_HOST }}
+          POSTGRES_PORT: ${{ secrets.DB_PORT }}
+          POSTGRES_DB: ${{ secrets.DB_NAME }}
+          POSTGRES_USER: ${{ secrets.DB_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL || 'gpt-3.5-turbo' }}
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER || 'openai' }}
+          LOCAL_MODEL_DIR: ${{ secrets.LOCAL_MODEL_DIR }}
+          DEBUG: ${{ secrets.DEBUG || 'false' }}
+        run: |
+          ssh -i ~/.ssh/id_rsa -p ${{ secrets.EC2_SSH_PORT || 22 }} \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
+            # Load Docker image
+            docker load -i /tmp/chat-image.tar.gz
+            rm /tmp/chat-image.tar.gz
+            
+            # Stop and remove existing container
+            docker stop chat.minsol.kr || true
+            docker rm chat.minsol.kr || true
+            
+            # Run new container with environment variables
+            docker run -d \
+              --name chat.minsol.kr \
+              --restart unless-stopped \
+              -p 8001:8000 \
+              -e ENVIRONMENT=production \
+              -e DATABASE_URL="${DATABASE_URL}" \
+              -e POSTGRES_HOST="${POSTGRES_HOST}" \
+              -e POSTGRES_PORT="${POSTGRES_PORT}" \
+              -e POSTGRES_DB="${POSTGRES_DB}" \
+              -e POSTGRES_USER="${POSTGRES_USER}" \
+              -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+              -e OPENAI_API_KEY="${OPENAI_API_KEY}" \
+              -e OPENAI_MODEL="${OPENAI_MODEL}" \
+              -e LLM_PROVIDER="${LLM_PROVIDER}" \
+              -e LOCAL_MODEL_DIR="${LOCAL_MODEL_DIR}" \
+              -e DEBUG="${DEBUG}" \
+              chat.minsol.kr:latest
+            
+            # Clean up old images
+            docker image prune -f
+          EOF
+
+      - name: Health Check
+        run: |
+          sleep 10
+          ssh -i ~/.ssh/id_rsa -p ${{ secrets.EC2_SSH_PORT || 22 }} \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "curl -f http://localhost:8001/health || curl -f http://localhost:8001/docs || exit 1"
+
